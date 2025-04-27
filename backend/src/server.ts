@@ -1,6 +1,7 @@
-import express, { Request, Response } from "express";
+import express from "express";
 import cors from "cors";
 import moongose from "mongoose";
+import type { Request, Response } from "express";
 
 require("dotenv").config({ path: __dirname + "/.env" });
 
@@ -30,35 +31,47 @@ moongose
     console.error("MongoDB connection error:", err);
   });
 
-const urlSchema = new moongose.Schema();
-({
+const urlSchema = new moongose.Schema({
   originalUrl: { type: String, required: true },
   shortUrl: { type: String, required: true, unique: true },
 });
+
 const Url = moongose.model("Url", urlSchema);
 
-app.post("/shorten", async (req: Request, res: Response) => {
+app.post("/", (req: Request, res: Response) => {
   const { originalUrl } = req.body;
-  const shortUrl = generateShortUrl(originalUrl); // Implement this function to generate a short URL
 
-  try {
-    const newUrl = new Url({ originalUrl, shortUrl });
-    await newUrl.save();
-    res.status(201).json(newUrl);
-  } catch (error) {
-    res.status(500).json({ error: "Error saving URL" });
+  if (!originalUrl) {
+    res.status(400).json({ error: "Original URL is required" });
+    return;
   }
-});
-app.get("/shorten/:shortUrl", async (req: Request, res: Response) => {
-  const { shortUrl } = req.params;
 
-  try {
-    const url = await Url.findOne({ shortUrl });
-    if (!url) {
-      return res.status(404).json({ error: "URL not found" });
-    }
-    res.redirect(url.originalUrl);
-  } catch (error) {
-    res.status(500).json({ error: "Error retrieving URL" });
-  }
+  const shortUrl = generateShortUrl(originalUrl);
+
+  const newUrl = new Url({ originalUrl, shortUrl });
+  newUrl
+    .save()
+    .then((savedUrl) => {
+      console.log("Sending response:", savedUrl);
+      res.status(201).json({
+        shortUrl: savedUrl.shortUrl,
+        originalUrl: savedUrl.originalUrl,
+      });
+    })
+    .catch((error) => {
+      console.error("Error saving URL:", error);
+      res.status(500).json({ error: "Error saving URL" });
+    });
 });
+
+function generateShortUrl(originalUrl: string): string {
+  const characters =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let shortUrl = "";
+  for (let i = 0; i < 6; i++) {
+    shortUrl += characters.charAt(
+      Math.floor(Math.random() * characters.length)
+    );
+  }
+  return shortUrl;
+}
