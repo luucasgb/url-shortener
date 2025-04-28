@@ -97,7 +97,7 @@
       <div class="result">
         <p>Your shortened URL:</p>
         <a href={shortenedUrl} target="_blank" rel="noopener noreferrer">
-          {shortenedUrl}
+          {new URL(shortenedUrl).hostname}/{new URL(shortenedUrl).pathname.split('/')[1]}
         </a>
       </div>
     {/if}

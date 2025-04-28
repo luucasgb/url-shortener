@@ -1,6 +1,7 @@
 import express, { Request, Response } from "express";
 import cors from "cors";
 import mongoose, { mongo } from "mongoose";
+import rateLimit from "express-rate-limit";
 
 // Load environment variables
 require("dotenv").config({ path: __dirname + "/.env" });
@@ -28,6 +29,11 @@ interface ErrorResponse {
 
 const app = express();
 
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+});
+
 // Environment variables with validation
 const PORT = process.env.PORT || 3000;
 const MONGO_URI =
@@ -36,7 +42,7 @@ const MONGO_USERNAME = process.env.MONGO_INITDB_ROOT_USERNAME || "admin";
 const MONGO_PASSWORD = process.env.MONGO_INITDB_ROOT_PASSWORD || "password";
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5000";
 
-// Middleware
+// Middleware;
 app.use(
   cors({
     origin: FRONTEND_URL,
@@ -45,6 +51,7 @@ app.use(
   })
 );
 app.use(express.json());
+app.use("/shorten", limiter);
 
 // Health check endpoint
 app.get("/", (req: Request, res: Response) => {
@@ -58,8 +65,6 @@ const connectToDatabase = async () => {
       "<username>",
       MONGO_USERNAME
     ).replace("<password>", MONGO_PASSWORD);
-
-    console.log(mongoConnectionString);
     await mongoose.connect(mongoConnectionString, {
       serverSelectionTimeoutMS: 5000,
       retryWrites: true,
@@ -114,7 +119,9 @@ app.post("/shorten", async (req: Request, res: Response): Promise<any> => {
     const existingUrl = await Url.findOne({ originalUrl });
     if (existingUrl) {
       return res.status(200).json({
-        shortUrl: existingUrl.shortUrl,
+        shortUrl: `${req.protocol}://${req.get("host")}/${
+          existingUrl.shortUrl
+        }`,
         originalUrl: existingUrl.originalUrl,
         createdAt: existingUrl.createdAt,
       });
@@ -123,13 +130,11 @@ app.post("/shorten", async (req: Request, res: Response): Promise<any> => {
     // Generate and save new short URL
     const shortUrl = await generateUniqueShortUrl();
     const newUrl = new Url({ originalUrl, shortUrl });
-    const savedUrl = await newUrl.save();
+    await newUrl.save();
 
-    console.log("URL shortened successfully:", savedUrl.shortUrl);
     return res.status(201).json({
-      shortUrl: savedUrl.shortUrl,
-      originalUrl: savedUrl.originalUrl,
-      createdAt: savedUrl.createdAt,
+      shortUrl: `${req.protocol}://${req.get("host")}/${shortUrl}`,
+      originalUrl,
     });
   } catch (error) {
     console.error("Error saving URL:", error);
@@ -144,7 +149,7 @@ app.post("/shorten", async (req: Request, res: Response): Promise<any> => {
 async function generateUniqueShortUrl(): Promise<string> {
   const characters =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  const length = 6;
+  const length = 8;
   let attempts = 0;
   const maxAttempts = 5;
 
@@ -166,13 +171,30 @@ async function generateUniqueShortUrl(): Promise<string> {
   throw new Error("Could not generate a unique short URL");
 }
 
+// Redirect endpoint
+app.get("/:shortUrl", async (req: Request, res: Response): Promise<any> => {
+  const { shortUrl } = req.params;
+  console.log("Short URL:", shortUrl);
+  try {
+    const url = await Url.findOne({ shortUrl });
+    console.log("Found URL:", url);
+    if (!url) {
+      return res.status(404).json({ error: "URL not found" });
+    }
+    return res.redirect(302, url.originalUrl);
+  } catch (error) {
+    console.error("Error redirecting:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // Start server
 const startServer = async () => {
   await connectToDatabase();
 
   app.listen(Number(PORT), "localhost", () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
     console.log(`MongoDB URI: ${MONGO_URI}`);
+    console.log(`Server is running on http://localhost:${PORT}`);
     console.log(`CORS enabled for: ${FRONTEND_URL}`);
   });
 };
