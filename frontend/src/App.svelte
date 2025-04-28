@@ -3,31 +3,31 @@
   let shortenedUrl = '';
   let error = '';
   let loading = false;
-
-  // Fallback if VITE_API_URL is undefined (e.g., in dev)
+  let showResult = false;
+  let copyButtonText = 'Copy';
+  
   const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
   
-  // Type for the API response
   interface ShortenResponse {
     shortUrl?: string;
     error?: string;
   }    
 
-
   async function handleSubmit() {
     if (!url) {
       error = 'Please enter a URL';
+      showResult = false;
       return;
     }
 
-    // Reset state
+    // Reset states
     error = '';
     shortenedUrl = '';
+    showResult = false;
     loading = true;
 
-    // Add URL validation
     try {
-      new URL(url); // This will throw if URL is invalid
+      new URL(url);
     } catch (e) {
       error = 'Please enter a valid URL (include http:// or https://)';
       loading = false;
@@ -43,10 +43,7 @@
         body: JSON.stringify({ originalUrl: url }),
       });
 
-      console.log('Received response status:', response.status);
-
       const data: ShortenResponse = await response.json();
-      console.log('API Response data:', data);
 
       if (!response.ok) {
         throw new Error(data.error || `Server responded with status ${response.status}`);
@@ -57,16 +54,26 @@
       }
 
       shortenedUrl = data.shortUrl;
+      showResult = true;
     } catch (err) {
       console.error('Error details:', err);
       error = err instanceof Error ? err.message : 'An unexpected error occurred';
-      
-      // For network errors, provide more specific messaging
       if (err instanceof TypeError && err.message.includes('Failed to fetch')) {
         error = 'Could not connect to the server. Please try again later.';
       }
     } finally {
       loading = false;
+    }
+  }
+
+  // Copy to clipboard function
+  async function copyToClipboard(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      copyButtonText = 'Copied!';
+    } catch (err) {
+      error = 'Failed to copy to clipboard';
+      console.error('Copy failed:', err);
     }
   }
 </script>
@@ -90,17 +97,28 @@
     </form>
 
     {#if error}
-      <div class="error">{error}</div>
+      <div class="error-message">
+        {error}
+      </div>
     {/if}
 
-    {#if shortenedUrl}
-      <div class="result">
-        <p>Your shortened URL:</p>
+    {#if showResult}
+    <div class="result-box">
+      <p>Your shortened URL:</p>
+      <div class="url-container">
         <a href={shortenedUrl} target="_blank" rel="noopener noreferrer">
           {new URL(shortenedUrl).hostname}/{new URL(shortenedUrl).pathname.split('/')[1]}
         </a>
+        <button 
+          class="copy-button" 
+          on:click={() => copyToClipboard(shortenedUrl)}
+          aria-label="Copy to clipboard"
+        >
+          {copyButtonText}
+        </button>
       </div>
-    {/if}
+    </div>
+  {/if}
   </div>
 </main>
 
@@ -191,40 +209,81 @@
     transform: none;
   }
 
-  .error {
-    color: var(--color-beige);
+  .error-message {
+    color: #ff6b6b;
     margin: 1rem 0;
     padding: 0.75rem;
-    background-color: rgba(34, 40, 49, 0.5);
+    background-color: rgba(255, 107, 107, 0.1);
     border-radius: 4px;
-    border: 1px solid var(--color-beige);
+    border: 1px solid #ff6b6b;
     font-weight: 500;
   }
 
-  .result {
-    margin-top: 1rem;
-    padding: 1rem;
-    background-color: rgba(34, 40, 49, 0.5);
-    border-radius: 4px;
-    border: 1px solid var(--color-brown);
+  .result-box {
+    margin-top: 1.5rem;
+    padding: 1.25rem;
+    background-color: rgba(75, 192, 192, 0.1);
+    border-radius: 6px;
+    border: 1px solid #4bc0c0;
+    animation: fadeIn 0.3s ease-out;
   }
 
-  .result p {
-    margin-bottom: 0.5rem;
-    color: var(--color-beige);
+  .result-box p {
+    margin-bottom: 0.75rem;
+    color: #4bc0c0;
     font-weight: 500;
   }
 
-  .result a {
-    color: var(--color-brown);
+  .result-box a {
+    color: #4bc0c0;
     text-decoration: none;
     word-break: break-all;
     transition: color 0.2s;
     font-weight: 500;
   }
 
-  .result a:hover {
-    color: var(--color-beige);
+  .result-box a:hover {
+    color: #2d9d9d;
     text-decoration: underline;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .url-container {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    margin-top: 0.5rem;
+  }
+
+  .copy-button {
+    padding: 0.5rem 1rem;
+    background-color: var(--color-brown);
+    color: var(--color-dark);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-family: 'Poppins', sans-serif;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  .copy-button:hover {
+    background-color: var(--color-beige);
+    transform: translateY(-1px);
+  }
+
+  /* Animation for the "Copied!" feedback */
+  @keyframes fadeInOut {
+    0% { opacity: 0; transform: scale(0.95); }
+    50% { opacity: 1; transform: scale(1.05); }
+    100% { opacity: 0; transform: scale(0.95); }
+  }
+
+  .copy-button:active {
+    transform: translateY(0);
   }
 </style>
