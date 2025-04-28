@@ -4,16 +4,38 @@
   let error = '';
   let loading = false;
 
+  // Fallback if VITE_API_URL is undefined (e.g., in dev)
+  const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+  
+  // Type for the API response
+  interface ShortenResponse {
+    shortUrl?: string;
+    error?: string;
+  }    
+
+
   async function handleSubmit() {
     if (!url) {
       error = 'Please enter a URL';
       return;
     }
 
+    // Reset state
+    error = '';
+    shortenedUrl = '';
+    loading = true;
+
+    // Add URL validation
     try {
-      loading = true;
-      error = '';
-      const response = await fetch('http://localhost:3000/', {
+      new URL(url); // This will throw if URL is invalid
+    } catch (e) {
+      error = 'Please enter a valid URL (include http:// or https://)';
+      loading = false;
+      return;
+    }
+
+    try {      
+      const response = await fetch(`${API_BASE_URL}/shorten`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -21,17 +43,28 @@
         body: JSON.stringify({ originalUrl: url }),
       });
 
+      console.log('Received response status:', response.status);
+
+      const data: ShortenResponse = await response.json();
+      console.log('API Response data:', data);
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to shorten URL');
+        throw new Error(data.error || `Server responded with status ${response.status}`);
       }
 
-      const data = await response.json();
-      console.log('API Response:', data);
+      if (!data.shortUrl) {
+        throw new Error('Server did not return a shortened URL');
+      }
+
       shortenedUrl = data.shortUrl;
     } catch (err) {
-      console.error('Error:', err);
-      error = err instanceof Error ? err.message : 'An error occurred';
+      console.error('Error details:', err);
+      error = err instanceof Error ? err.message : 'An unexpected error occurred';
+      
+      // For network errors, provide more specific messaging
+      if (err instanceof TypeError && err.message.includes('Failed to fetch')) {
+        error = 'Could not connect to the server. Please try again later.';
+      }
     } finally {
       loading = false;
     }

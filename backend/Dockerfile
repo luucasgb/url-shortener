@@ -1,15 +1,36 @@
-# Use the official MongoDB image
-FROM mongo:latest
+# Build stage
+FROM node:20-alpine AS builder
 
-# Set environment variables for MongoDB root user
-ENV MONGO_INITDB_ROOT_USERNAME=admin
-ENV MONGO_INITDB_ROOT_PASSWORD=password
+WORKDIR /app
 
-# Set the default database directory
-VOLUME /data/db
+# Copy package files
+COPY package*.json ./
 
-# Expose the default MongoDB port
-EXPOSE 27017
+# Install dependencies
+RUN npm install
 
-# Start MongoDB
-CMD ["mongod"]
+# Copy source files
+COPY . .
+
+# Build TypeScript
+RUN npm run build
+
+# Production stage
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install production dependencies only
+RUN npm install --production
+
+# Copy built files from builder stage
+COPY --from=builder /app/dist ./dist
+
+# Expose port
+EXPOSE 3000
+
+# Start the application
+CMD ["node", "dist/server.js"]
