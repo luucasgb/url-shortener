@@ -25,10 +25,10 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "80:80"
+      - "5000:5000"
     environment:
       # Use localhost for browser API calls, backend for container-to-container
-      - VITE_API_URL=http://localhost:3000
+      - VITE_API_URL=http://backend:3000
     depends_on:
       - backend
 
